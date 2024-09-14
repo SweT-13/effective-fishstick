@@ -1,7 +1,7 @@
 #include <iostream>
 #include <fstream>
 
-#define LSB_C 1
+// #define PRINT_BIT_INSERT
 
 template <typename T, typename I>
 T arrToOne(I *arr)
@@ -14,13 +14,44 @@ T arrToOne(I *arr)
     return rez;
 }
 
-int main(int argc, char *argv[])
+template <typename I>
+void printBitMap(I val, int countBit = sizeof(I) * 8, int endl = 0)
 {
+    for (int i = countBit - 1; i >= 0; --i)
+    {
+        std::cout << ((val >> i) & 1);
+        if (i % 8 == 0 && i > 0)
+        {
+            std::cout << "|";
+        }
+    }
+    std::cout << " ";
+    if (endl == 1)
+    {
+        std::cout << std::endl;
+    }
+    if (endl == 2)
+    {
+        std::cout << "\t";
+    }
+    return;
+}
 
-    // std::string mesInput = "Hello world";
-    std::string mesInput = "main.cpp";
+int getBitMask(int bit)
+{
+    if (bit < 1)
+    {
+        return 0;
+    }
+    return getBitMask(bit - 1) | (1 << bit - 1);
+}
 
-    std::fstream Conteiner("test.bmp", std::ios_base::in | std::ios_base::out | std::ios_base::binary);
+int InsertBMP(std::string conteinerInput, std::string mesInput, short countBit = 1, std::string nameTmpFile = "tmp")
+{
+    // unsigned int const countBit = 5;
+    unsigned int const maskBit = getBitMask(countBit);
+
+    std::fstream Conteiner(conteinerInput, std::ios_base::in | std::ios_base::out | std::ios_base::binary);
     if (Conteiner.is_open())
     {
         char *conteinerBuf = new char[4]{0};
@@ -51,7 +82,7 @@ int main(int argc, char *argv[])
         else
         {
             sizeMesseg = mesInput.size();
-            std::ofstream MyFile("tmp");
+            std::ofstream MyFile(nameTmpFile);
             if (!MyFile.is_open())
             {
                 std::cerr << "need create tmp file" << std::endl;
@@ -60,7 +91,7 @@ int main(int argc, char *argv[])
             }
             MyFile << mesInput;
             MyFile.close();
-            mesBox.open("tmp", std::ios_base::in | std::ios_base::binary);
+            mesBox.open(nameTmpFile, std::ios_base::in | std::ios_base::binary);
             if (!mesBox.is_open())
             {
                 std::cerr << "need FILE" << std::endl;
@@ -77,11 +108,12 @@ int main(int argc, char *argv[])
             std::cin >> ans;
             if (ans != "y")
             {
+                std::remove(nameTmpFile.data());
                 Conteiner.close();
                 return 1;
             }
         }
-        char mesBuf = 0;
+        char mesBuf[2] = {0};
         // std::cout << size << std::endl;
         for (int i = 0; i < sizeConteiner; i++)
         {
@@ -92,27 +124,44 @@ int main(int argc, char *argv[])
             char tmp = 0;
             if (i <= (sizeMesseg + 1) * 8)
             {
-                if (i % 8 == 0)
+                if (i % (8 / countBit + 1) == 0)
                 {
-                    mesBox.read(&mesBuf, 1);
+                    mesBox.read(mesBuf, 2);
+                    mesBox.seekg(-1, mesBox.cur);
                 }
-                tmp = (conteinerBuf[0] & 0xFE) | (mesBuf >> (i % 8) & 0x01);
+                // i 0 1 2        | 3 4 5      | 6 7 | 8 9
+                //   0 3 6{2 + 1} | 1 4 7{1+2} | 2 5 | 0 3
+                // i 0 1        | 2 3      | 4      | 5 6      | 7 | 8 9
+                //   0 5{3 + 2} | 2 7{1+4} | 4{4+1} | 1 6{2+3} | 3 | 0
+                tmp = (conteinerBuf[0] & ~maskBit) | ((arrToOne<short>(mesBuf) >> ((i * countBit) % 8)) & maskBit);
+#ifdef PRINT_BIT_INSERT
+                printBitMap((arrToOne<short>(mesBuf) >> ((i * countBit) % 8)) & maskBit, countBit, 2);
+#endif
             }
             else
             {
-                break;
+                break; // Mojno dobivat ostavsheesa prostranstvo
                 // tmp = (conteinerBuf[0] & 0xFE) | (0xAA >> (i % 8) & 0x01);
             }
-            std::cout << (int)tmp << " ";
+            // printf("%02x ", static_cast<unsigned char>(tmp));
+            // std::cout << std::hex << static_cast<unsigned short>(static_cast<unsigned char>(tmp)) << "\t";
             Conteiner.seekp(pos, Conteiner.beg);
             Conteiner.write(&tmp, 1);
             // std::cout << (int)conteinerBuf[0] << " ";
         }
         Conteiner.close();
+        mesBox.close();
+        std::remove(nameTmpFile.data()); // СНАЧАЛО ЗАКРЫТЬ ПОТОМ УДАЛИТЬ АУТ
     }
     else
     {
         std::cerr << " Conteiner don't open" << std::endl;
     }
+    return 0;
+}
+
+int main(int argc, char *argv[])
+{
+    InsertBMP("test.bmp", "Hello world", 3);
     return 0;
 }
